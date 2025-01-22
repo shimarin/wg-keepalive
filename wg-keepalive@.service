@@ -1,9 +1,9 @@
 [Unit]
 Description=WireGuard keepalive service
-After=wg-quick@%I
+After=wg-quick@%i
 
 [Service]
-ExecStart=/usr/bin/wg-keepalive %I
+ExecStart=/usr/bin/wg-keepalive --no-log-timestamp %i
 Restart=always
 RestartSec=5
 
