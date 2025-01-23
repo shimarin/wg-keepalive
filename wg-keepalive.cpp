@@ -95,33 +95,42 @@ void keepalive(const std::string &interface, std::shared_ptr<dictionary> config)
     auto last_time = std::chrono::system_clock::now();
     uint64_t last_rxbytes = 0;
     while (true) {
-        auto rxbytes = get_rxbytes(interface);
-        if (rxbytes != last_rxbytes) {
-            spdlog::debug("rxbytes changed from {} to {}", last_rxbytes, rxbytes);
-            last_time = std::chrono::system_clock::now();
-            last_rxbytes = rxbytes;
-        } else {
-            spdlog::debug("rxbytes unchanged at {}", rxbytes);
-            // check if the timeout has been reached
-            auto now = std::chrono::system_clock::now();
-            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_time).count();
-            if (elapsed >= timeout) {
-                spdlog::warn("Timeout reached, restarting interface");
-                // run the restart command
-                if (pre_restart_command != nullptr) {
-                    spdlog::info("Running pre-restart command: {}", pre_restart_command);
-                    system(pre_restart_command);
+        auto interval_for_this_time = interval;
+        try {
+            auto rxbytes = get_rxbytes(interface);
+            if (rxbytes != last_rxbytes) {
+                spdlog::debug("rxbytes changed from {} to {}", last_rxbytes, rxbytes);
+                last_time = std::chrono::system_clock::now();
+                last_rxbytes = rxbytes;
+            } else {
+                spdlog::debug("rxbytes unchanged at {}", rxbytes);
+                // check if the timeout has been reached
+                auto now = std::chrono::system_clock::now();
+                auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_time).count();
+                if (elapsed >= timeout) {
+                    spdlog::warn("Timeout reached, restarting interface");
+                    // run the restart command
+                    if (pre_restart_command != nullptr) {
+                        spdlog::info("Running pre-restart command: {}", pre_restart_command);
+                        system(pre_restart_command);
+                    }
+                    system(restart_command);
+                    if (post_restart_command != nullptr) {
+                        spdlog::info("Running post-restart command: {}", post_restart_command);
+                        system(post_restart_command);
+                    }
+                    last_time = now;
+                    last_rxbytes = 0;
                 }
-                system(restart_command);
-                if (post_restart_command != nullptr) {
-                    spdlog::info("Running post-restart command: {}", post_restart_command);
-                    system(post_restart_command);
-                }
-                last_time = now;
-                last_rxbytes = 0;
             }
         }
-        std::this_thread::sleep_for(std::chrono::seconds(interval));
+        catch (const std::exception &err) {
+            spdlog::error("Error: {}", err.what());
+            if (interval < 300) {
+                interval_for_this_time = 300;
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(interval_for_this_time));
     }
 }
 
